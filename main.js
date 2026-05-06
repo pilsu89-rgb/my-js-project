@@ -61,6 +61,34 @@ const weatherDesc = document.querySelector("#weather-desc");
 
 let todos = loadTodos();
 
+function getStorageItem(key) {
+  try {
+    return localStorage.getItem(key);
+  } catch {
+    return null;
+  }
+}
+
+function setStorageItem(key, value) {
+  try {
+    localStorage.setItem(key, value);
+  } catch {
+    return false;
+  }
+
+  return true;
+}
+
+function removeStorageItem(key) {
+  try {
+    localStorage.removeItem(key);
+  } catch {
+    return false;
+  }
+
+  return true;
+}
+
 function setRandomBackground() {
   const selectedImage = backgroundImages[Math.floor(Math.random() * backgroundImages.length)];
   document.documentElement.style.setProperty("--bg-image", `url("${selectedImage}")`);
@@ -140,12 +168,12 @@ function handleLogin(event) {
     return;
   }
 
-  localStorage.setItem(STORAGE_KEYS.username, username);
+  setStorageItem(STORAGE_KEYS.username, username);
   showDashboard(username);
 }
 
 function handleLogout() {
-  localStorage.removeItem(STORAGE_KEYS.username);
+  removeStorageItem(STORAGE_KEYS.username);
   showLogin();
 }
 
@@ -154,7 +182,9 @@ function loadTodos() {
     const savedTodos = JSON.parse(localStorage.getItem(STORAGE_KEYS.todos));
 
     if (Array.isArray(savedTodos)) {
-      return savedTodos;
+      return savedTodos.filter((todo) => {
+        return todo && typeof todo.id === "string" && typeof todo.text === "string" && typeof todo.done === "boolean";
+      });
     }
 
     return [];
@@ -164,7 +194,7 @@ function loadTodos() {
 }
 
 function saveTodos() {
-  localStorage.setItem(STORAGE_KEYS.todos, JSON.stringify(todos));
+  setStorageItem(STORAGE_KEYS.todos, JSON.stringify(todos));
 }
 
 function createTodoId() {
@@ -288,15 +318,71 @@ function setWeatherMessage(place, temp, desc) {
   weatherDesc.textContent = desc;
 }
 
+async function fetchPlaceName(latitude, longitude) {
+  const locationUrl = `https://geocoding-api.open-meteo.com/v1/reverse?latitude=${latitude}&longitude=${longitude}&language=ko&format=json`;
+
+  try {
+    const locationResponse = await fetch(locationUrl);
+
+    if (!locationResponse.ok) {
+      return "현재 위치";
+    }
+
+    const locationData = await locationResponse.json();
+    const results = Array.isArray(locationData.results) ? locationData.results : [];
+    const placeData = results[0];
+
+    if (!placeData) {
+      return "현재 위치";
+    }
+
+    return [placeData.name, placeData.admin1].filter(Boolean).join(", ") || "현재 위치";
+  } catch {
+    return "현재 위치";
+  }
+}
+
+async function fetchWeatherByCoords(latitude, longitude, placeName) {
+  const weatherUrl = `https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current=temperature_2m,weather_code&timezone=auto`;
+  const weatherResponse = await fetch(weatherUrl);
+
+  if (!weatherResponse.ok) {
+    throw new Error("weather request failed");
+  }
+
+  const weatherData = await weatherResponse.json();
+  const current = weatherData.current;
+
+  if (!current || typeof current.temperature_2m !== "number") {
+    throw new Error("weather data invalid");
+  }
+
+  const temperature = Math.round(current.temperature_2m);
+  const weatherCode = current.weather_code;
+
+  setWeatherMessage(placeName, `${temperature}°C`, weatherNames[weatherCode] || "날씨 정보 확인");
+}
+
+async function fetchFallbackWeather() {
+  try {
+    await fetchWeatherByCoords(37.5665, 126.9780, "서울 기준");
+  } catch {
+    setWeatherMessage("날씨 오류", "--°C", "날씨 정보를 불러올 수 없음");
+  }
+}
+
 function getWeather() {
   if (!navigator.geolocation) {
-    setWeatherMessage("위치 사용 불가", "--°C", "브라우저가 위치 기능을 지원하지 않음");
+    setWeatherMessage("위치 미지원", "--°C", "서울 기준 날씨 표시");
+    fetchFallbackWeather();
     return;
   }
 
+  setWeatherMessage("위치 확인 중", "--°C", "권한 요청을 확인하세요");
+
   navigator.geolocation.getCurrentPosition(handlePositionSuccess, handlePositionError, {
-    enableHighAccuracy: true,
-    timeout: 10000,
+    enableHighAccuracy: false,
+    timeout: 15000,
     maximumAge: 600000
   });
 }
@@ -305,46 +391,38 @@ async function handlePositionSuccess(position) {
   const latitude = position.coords.latitude;
   const longitude = position.coords.longitude;
 
-  const weatherUrl = `https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current=temperature_2m,weather_code&timezone=auto`;
-  const locationUrl = `https://geocoding-api.open-meteo.com/v1/reverse?latitude=${latitude}&longitude=${longitude}&language=ko&format=json`;
-
   try {
-    const [weatherResponse, locationResponse] = await Promise.all([
-      fetch(weatherUrl),
-      fetch(locationUrl)
-    ]);
-
-    if (!weatherResponse.ok) {
-      throw new Error("weather request failed");
-    }
-
-    const weatherData = await weatherResponse.json();
-    const locationData = locationResponse.ok ? await locationResponse.json() : null;
-
-    const current = weatherData.current;
-    const placeData = locationData && locationData.results ? locationData.results[0] : null;
-    const placeName = placeData ? [placeData.name, placeData.admin1].filter(Boolean).join(", ") : "현재 위치";
-    const temperature = Math.round(current.temperature_2m);
-    const weatherCode = current.weather_code;
-
-    setWeatherMessage(placeName, `${temperature}°C`, weatherNames[weatherCode] || "날씨 정보 확인");
+    const placeName = await fetchPlaceName(latitude, longitude);
+    await fetchWeatherByCoords(latitude, longitude, placeName);
   } catch {
-    setWeatherMessage("날씨 오류", "--°C", "잠시 후 다시 시도하세요");
+    setWeatherMessage("현재 위치", "--°C", "서울 기준 날씨 표시");
+    fetchFallbackWeather();
   }
 }
 
 function handlePositionError(error) {
+  console.log("Geolocation error:", error.code, error.message);
+
   if (error.code === error.PERMISSION_DENIED) {
-    setWeatherMessage("위치 권한 필요", "--°C", "브라우저에서 위치를 허용하세요");
+    setWeatherMessage("위치 권한 거부", "--°C", "서울 기준 날씨 표시");
+    fetchFallbackWeather();
+    return;
+  }
+
+  if (error.code === error.POSITION_UNAVAILABLE) {
+    setWeatherMessage("위치 확인 불가", "--°C", "서울 기준 날씨 표시");
+    fetchFallbackWeather();
     return;
   }
 
   if (error.code === error.TIMEOUT) {
-    setWeatherMessage("위치 지연", "--°C", "위치 확인 시간이 초과됨");
+    setWeatherMessage("위치 시간 초과", "--°C", "서울 기준 날씨 표시");
+    fetchFallbackWeather();
     return;
   }
 
-  setWeatherMessage("위치 확인 실패", "--°C", "현재 위치를 가져올 수 없음");
+  setWeatherMessage("위치 오류", "--°C", "서울 기준 날씨 표시");
+  fetchFallbackWeather();
 }
 
 function init() {
@@ -353,7 +431,7 @@ function init() {
   setInterval(updateClock, 1000);
   getWeather();
 
-  const savedUsername = localStorage.getItem(STORAGE_KEYS.username);
+  const savedUsername = getStorageItem(STORAGE_KEYS.username);
 
   if (savedUsername) {
     showDashboard(savedUsername);

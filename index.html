@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Orbit Desk</title>
+  <link rel="stylesheet" href="./style.css">
+  <script src="./main.js" defer></script>
+</head>
+<body>
+  <div class="noise"></div>
+  <div class="page">
+    <header class="top-bar">
+      <div class="brand">
+        <span class="brand-mark"></span>
+        <span>Orbit Desk</span>
+      </div>
+
+      <button id="logout-button" class="logout-button hidden" type="button">로그아웃</button>
+    </header>
+
+    <aside class="weather-card" aria-live="polite">
+      <span id="weather-place" class="weather-place">위치 확인 중</span>
+      <strong id="weather-temp" class="weather-temp">--°C</strong>
+      <span id="weather-desc" class="weather-desc">날씨 불러오는 중</span>
+    </aside>
+
+    <main class="center-stage">
+      <section class="clock-area">
+        <p id="today" class="today">0000년 00월 00일</p>
+        <h1 id="clock" class="clock">00:00:00</h1>
+      </section>
+
+      <section id="login-card" class="glass-card login-card">
+        <p class="eyebrow">WELCOME BACK</p>
+        <h2>오늘을 시작할 이름을 알려주세요</h2>
+
+        <form id="login-form" class="login-form">
+          <input id="login-input" type="text" maxlength="14" autocomplete="off" placeholder="이름을 입력하세요">
+          <button type="submit">입장</button>
+        </form>
+      </section>
+
+      <section id="dashboard" class="dashboard hidden">
+        <div class="greeting-card">
+          <p class="eyebrow">TODAY MODE</p>
+          <h2 id="greeting">좋은 하루예요.</h2>
+          <p id="focus-message" class="focus-message">가장 작은 일부터 끝내봅시다.</p>
+        </div>
+
+        <section class="todo-card">
+          <div class="todo-header">
+            <div>
+              <p class="eyebrow">TASK LIST</p>
+              <h3>오늘 할 일</h3>
+            </div>
+            <div class="todo-count">
+              <span id="done-count">0</span>
+              <span>/</span>
+              <span id="total-count">0</span>
+            </div>
+          </div>
+
+          <form id="todo-form" class="todo-form">
+            <input id="todo-input" type="text" maxlength="36" autocomplete="off" placeholder="새로운 할 일을 입력하세요">
+            <button type="submit">추가</button>
+          </form>
+
+          <ul id="todo-list" class="todo-list"></ul>
+          <p id="empty-message" class="empty-message">아직 할 일이 없습니다.</p>
+        </section>
+      </section>
+    </main>
+  </div>
+</body>
+</html>
